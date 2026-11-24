@@ -5,9 +5,9 @@
 *Version: 1.1 — System version: IRL Engine v1 (whitepaper v4)*
 *See diagrams.md for the visual flow diagram of this process.*
 
-This appendix walks through two complete IRL traces captured from a live deployment:
-a **matched** trade (the normal path) and a **divergent** trade (the detection path).
-Every hash, timestamp, and identifier shown is real output from the running system.
+This appendix walks through two illustrative IRL traces: a **matched** trade (the
+normal path) and a **divergent** trade (the detection path).
+*Illustrative traces. Values are representative, not captured from production.*
 
 ---
 
@@ -153,7 +153,7 @@ whitespace; not RFC 8785/JCS, see whitepaper §7.1).
 A representative excerpt of the canonical form (keys sorted, no whitespace):
 
 ```json
-{"execution":{"action":{"size":2.0,"type":"Long"},"asset":"BTC-PERP","client_order_id":"ord-smoke-001","limit_price":null,"notional":120000.0,"order_type":"MARKET","quantity":2.0,"venue_id":"XNAS"},"feature_schema_id":"schema-prod-v1","heartbeat":{"mta_ref":"3fa9e02a...","regime_id":1,"sequence_id":0,"signature":"","timestamp_ms":1742694308484},"latent_fingerprint":"67636f72...","mta_hash":"3fa9e02a...","mta_regime_id":1,"mta_version":"v1","ser_version":1,"trace_id":"96e67b89-05a7-4a47-a756-04c9abe69d39","txn_time":1742694308982,"valid_time":1742694308484}
+{"execution":{"action":{"size":2.0,"type":"Long"},"asset":"BTC-PERP","client_order_id":"ord-smoke-001","limit_price":null,"notional":120000.0,"order_type":"MARKET","quantity":2.0,"venue_id":"XNAS"},"feature_schema_id":"schema-prod-v1","heartbeat":{"mta_ref":"3fa9e02a...","regime_id":1,"sequence_id":0,"signature":"","timestamp_ms":1742694308484},"latent_fingerprint":"67636f72...","mta_hash":"3fa9e02a...","mta_regime_id":1,"mta_version":"v1","trace_id":"96e67b89-05a7-4a47-a756-04c9abe69d39","txn_time":1742694308982,"valid_time":1742694308484}
 ```
 
 > **`snapshot_version`:** Each trace stores its seal version (`1` = SHA-256 over
@@ -284,7 +284,6 @@ The full `Reasoning_Trace_v1` stored in the immutable ledger:
     "time_source":   "System"
   },
   "integrity": {
-    "ser_version":         1,
     "reasoning_hash":      "b3971de1b84da2b1450e31beb3bad6d47c9b2ddb12cc26286aceefdf26e17157",
     "final_proof":         "9bcd966a3e85bde3dea5079a38d5026c9dc15c5e7e417ba4a6c60ac9de741f33",
     "verification_status": "MATCHED",
@@ -476,7 +475,7 @@ IRL Engine receives, verifies signature, caches MtaState
     ▼
 MAR check → Policy check → L_t fingerprint → Bitemporal constraint
     │
-    │ All pass → CognitiveSnapshot S_t assembled (includes ser_version)
+    │ All pass → CognitiveSnapshot S_t assembled
     ▼
 reasoning_hash = SHA-256(IRL canonical JSON of S_t)         [reasoning locked]
     │

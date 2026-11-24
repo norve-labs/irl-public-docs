@@ -29,7 +29,7 @@
 
 Autonomous trading agents make thousands of decisions per day without a human in the loop. Current infrastructure records what they did — not what they knew, what they were permitted to do, or whether the exchange executed what was actually authorised. This gap between agent reasoning and market action is the **Ownership Gap**: the absence of a cryptographic chain of custody from decision to execution.
 
-IRL (Intent, Reasoning, and Liability) is a **signal-agnostic** pre-execution mandate gateway that addresses this gap. Before any order leaves the firm, IRL seals the agent's epistemic state — its knowledge of market regime, its model identity, its authorised intent — into a tamper-evident `CognitiveSnapshot`. That snapshot is cryptographically bound to the exchange confirmation, creating a tamper-evident audit chain: once a record is anchored, editing the sealed snapshot or the order binding fails verification.
+IRL (Intent, Reasoning, and Liability) is a **signal-agnostic** pre-execution mandate gateway that addresses this gap. Before any order leaves the firm, IRL seals the agent's epistemic state — its knowledge of market regime, its model identity, its authorised intent — into a tamper-evident `CognitiveSnapshot`. That snapshot is cryptographically bound to the exchange confirmation, creating a tamper-evident audit chain: once a record is anchored, editing the sealed snapshot fails verification.
 
 IRL needs no external signal to run: each agent's own mandate (notional cap, allowed assets and venues, model identity, status) is the policy. Optionally, IRL binds every decision to a cryptographically attested market regime through an abstract Market Truth Anchor (MTA) interface. MacroPulse operates one such signed regime feed; firms with proprietary regime models or multi-operator consensus pipelines connect their own. The seal mechanism and the audit chain are identical in every mode.
 
@@ -97,7 +97,7 @@ This is the **Ownership Gap**: the absence of a chain of custody between AI reas
 
 IRL closes the Ownership Gap before the order is placed. The agent's epistemic state — its knowledge of market regime, its model identity, its authorised intent — is sealed into a `CognitiveSnapshot` before any communication with the exchange. That seal becomes the root of a cryptographic chain that terminates only when the exchange confirms execution.
 
-Edits to the sealed snapshot or to the order binding of an anchored record are detectable: they break the hash chain and fail verification. The policy verdict and the `MATCHED`/`DIVERGENT` status are recorded alongside the trace but are not part of the sealed hash, so the hash chain alone does not protect them. Anchoring also does not prove that a bundle is complete; omitted records are not detected by the hash chain alone.
+Edits to the sealed snapshot of an anchored record are detectable: they change its reasoning_hash and break Merkle inclusion. The binding to the exchange order id (final_proof) is recomputable but not anchored, so it is checked against the venue's own records, not by the hash chain alone. The policy verdict and the `MATCHED`/`DIVERGENT` status are recorded alongside the trace but are not part of the sealed hash, so the hash chain alone does not protect them. Anchoring also does not prove that a bundle is complete; omitted records are not detected by the hash chain alone.
 
 ---
 
@@ -454,7 +454,7 @@ Every trace is stored with two time dimensions:
 - **valid_time** — when the agent claims to have reasoned (business time)
 - **txn_time** — when the IRL engine recorded the intent (transaction time)
 
-After sealing, both timestamps are part of the hashed record, so changing either one breaks verification. Queries over the bitemporal ledger can reconstruct the exact state of the world as it was known at any historical point — not just what happened, but what was believed to be true when it happened.
+Both timestamps are inside the sealed snapshot, so changing either one changes the reasoning_hash; detecting it requires recomputing the hash from the full snapshot (v1) or the public view (v2). Queries over the bitemporal ledger can reconstruct the exact state of the world as it was known at any historical point — not just what happened, but what was believed to be true when it happened.
 
 ### 7.4 Why JSON
 
@@ -749,11 +749,11 @@ IRL is a pre-execution gateway, not a comprehensive fraud prevention system. It 
 - Verify the truthfulness of the agent's `valid_time` claim (only that it precedes `txn_time`)
 - Replace position-level risk management systems
 
-IRL's guarantee is narrower: *if a trade was executed through IRL, there exists a tamper-evident cryptographic record of what was authorised before it happened, and whether the execution matched that authorisation.*
+IRL's guarantee is narrower: *if a trade was executed through IRL, there exists a tamper-evident record of what was authorised before it happened, bound to the exchange order id once execution is reported; the MATCHED/DIVERGENT status is recorded alongside it, not sealed.*
 
 ### 13.3 Sovereign Gateway (Layer 3)
 
-In Layers 1 and 2, IRL enforces the agent's mandate and produces verifiable records — but it does not control the execution channel. A sufficiently privileged operator could, in principle, bypass the sidecar and route orders directly to the exchange. Layer 3 eliminates this attack surface.
+In Layers 1 and 2, IRL enforces the agent's mandate and produces verifiable records — but it does not control the execution channel. A sufficiently privileged operator could, in principle, bypass the sidecar and route orders directly to the exchange. Layer 3 is designed to eliminate this attack surface.
 
 In the Sovereign Gateway configuration, the exchange API credentials are stored exclusively within a Trusted Execution Environment (TEE — Intel TDX or AMD SEV). The host OS, agent process, and all operator-level personnel cannot access these credentials. A trade order can only be signed if the Enclave Signer receives a **Double-Green signal**: simultaneous valid attestations from both the MTA policy layer (L1) and the Multi-Agent Registry (L2).
 
@@ -1253,7 +1253,7 @@ Two specific risks require attention:
 ## Appendix A — End-to-End Case Study
 *Version 1.0 — IRL Engine v1 / Whitepaper v4*
 
-This appendix walks through two complete IRL traces captured from a live deployment: a **matched** trade (the normal path) and a **divergent** trade (the detection path). Every hash, timestamp, and identifier shown is real output from the running system.
+This appendix walks through two illustrative IRL traces: a **matched** trade (the normal path) and a **divergent** trade (the detection path). *Illustrative traces. Values are representative, not captured from production.*
 
 ---
 
@@ -1810,4 +1810,4 @@ record as well.
 ---
 
 *IRL Whitepaper v5.0 — October 2026*
-*All cryptographic values in Appendix A are real outputs from the live system.*
+*Values in Appendix A are illustrative, not captured from production.*
