@@ -1809,5 +1809,5 @@ record as well.
 
 ---
 
-*IRL Whitepaper v5.0 — October 2026*
+*IRL Whitepaper v5.1 — November 2026*
 *Values in Appendix A are illustrative, not captured from production.*
