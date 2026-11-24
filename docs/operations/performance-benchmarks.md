@@ -39,7 +39,7 @@ Estimates, not measurements:
 | Live MTA fetch + Ed25519 verify | +2–10 ms | +5–20 ms |
 | KMS DEK generation (local) | +5–15 ms | +10–30 ms |
 | Heartbeat validation (L2, extra DB read) | +1–3 ms | +2–5 ms |
-| All production features combined | ~+10–28 ms | ~+17–55 ms |
+| All production features combined | ~+8–28 ms | ~+17–55 ms |
 
 ---
 

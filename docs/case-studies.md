@@ -240,7 +240,7 @@ final_proof = SHA-256(reasoning_hash || "||" || exchange_tx_id)
 
 ### Step 7 — Complete Audit Record
 
-The full `Reasoning_Trace_v1` stored in the immutable ledger:
+The full `Reasoning_Trace_v1` stored in the audit ledger:
 
 ```json
 {
@@ -316,24 +316,23 @@ mean the policy that was actually applied differed from what the MTA broadcast.
 **What this record proves:**
 - The agent knew `recovery` regime (mta_hash) before it acted — and those constraints were signed by the MTA operator
 - The model hash it declared matched the registered one at authorize time (the check is not sealed; the declared L_t fingerprint is in the sealed snapshot)
-- Its intent was authorized before the order was placed (`valid_time_ms` 498ms before `txn_time_ms`)
+- Its intent was authorized (`txn_time_ms`) before bind was called for the order; its declared `valid_time_ms` is 498 ms earlier
 - The exact policy limits that applied are committed to via `policy.hash`
 - The execution the agent reported matched what was authorized (MATCHED, within 0.01% quantity tolerance). IRL reconciles the agent's report; it does not query the exchange
 - The chain is tamper-evident where it is anchored: changing an anchored `reasoning_hash` breaks Merkle inclusion. `final_proof` and the status are recorded, not anchored
 
 ### What This Means for a Regulator
 
-A reviewer receiving this audit record can check it as follows. Step 1 needs the
-sealed snapshot from the operator's systems; the other steps do not:
+A reviewer receiving this audit record can run the steps that apply to its
+snapshot version:
 
-1. **Re-derive `reasoning_hash`**: Retrieve the full canonical JSON from the
-   system logs (identified by `trace_id`). Apply IRL canonicalization (whitepaper §7.1) and
-   SHA-256 hash the result using the rules for `snapshot_version` 1. If it
-   matches the stored `reasoning_hash`, the snapshot has not been altered since
-   sealing.
+1. **Re-derive `reasoning_hash`** (`snapshot_version` 2 only): the public view is
+   in the bundle; apply IRL canonicalization (whitepaper §7.1) and SHA-256. For
+   version 1 records, like this one, the preimage is not stored, so this step
+   cannot be run: start at step 2 and check Merkle inclusion and the anchor.
 
 2. **Verify the MTA signature**: Using the operator's registered public key (a
-   32-byte Ed25519 verifying key, registered with the regulator), verify the
+   32-byte Ed25519 verifying key, published by the MTA operator), verify the
    signature over the canonical MTA payload — which includes `risk_level`,
    `max_notional_scale`, and `allowed_sides`. This confirms both the regime label
    *and the exact enforcement limits* were attested by the operator before the
@@ -345,18 +344,19 @@ sealed snapshot from the operator's systems; the other steps do not:
    engine applied the limits actually broadcast by the MTA — not a different set.
 
 4. **Confirm the bitemporal constraint**: `valid_time_ms (08484) < txn_time_ms (08982)`.
-   The 498ms delta proves the agent's reasoning preceded the IRL engine's receipt
-   of the intent. Both timestamps are Unix milliseconds; no conversion is
-   required. `valid_time` is supplied by the agent and `txn_time` comes from the
-   operator's system clock; the heartbeat protocol bounds clock drift to a
-   configurable tolerance (§17.2 of the whitepaper).
+   The 498 ms delta shows the agent's declared `valid_time` precedes IRL's
+   receipt; IRL rejects any record where it does not. Both timestamps are Unix
+   milliseconds. `valid_time` is supplied by the agent and `txn_time` comes from
+   the operator's system clock. With the legacy Layer 2 heartbeat, IRL rejects
+   heartbeats older than `MAX_HEARTBEAT_DRIFT_MS` (default 200 ms; whitepaper §8).
 
 5. **Check the declared model against the registry**: Using `agent_id`,
    retrieve the registered `model_hash` from the Multi-Agent Registry. IRL
    checked at authorize time that the declared `model_hash_hex` matched it.
-   `model_hash` and `latent_fingerprint` are different values, both declared by
-   the operator: this shows consistency with the registration, not which model
-   actually ran.
+   `model_hash` and `latent_fingerprint` are different values: `model_hash` is
+   declared by the operator, and `latent_fingerprint` is computed by IRL from
+   identifiers the operator declares. This shows consistency with the
+   registration, not which model actually ran.
 
 6. **Confirm the `client_order_id` binding**: The `client_order_id`
    (`ord-smoke-001`) is the field used to look up the pre-authorized intent
@@ -366,12 +366,12 @@ sealed snapshot from the operator's systems; the other steps do not:
    supports arbitrary order metadata.
 
 7. **Re-derive `final_proof`**: SHA-256 of `reasoning_hash || "||" || exchange_tx_id`.
-   If it matches, the exchange transaction ID is cryptographically bound to the
-   authorized reasoning. The agent cannot claim a different exchange transaction
-   was the one authorized.
+   If it matches, the exchange transaction ID is bound to the authorized
+   reasoning. A different transaction id gives a different `final_proof`; since
+   `final_proof` is not anchored, check the id against the venue's records.
 
-8. **Confirm MATCHED status**: The reconciliation result proves the exchange
-   executed the authorized asset (BTC-PERP) within the authorized quantity
+8. **Confirm MATCHED status**: The reconciliation result shows the execution the
+   agent reported matched the authorized asset (BTC-PERP) and quantity within
    tolerance (0.01%). Notional is not reconciled post-trade because execution
    price is set by the exchange; the notional cap was already enforced at
    authorization.
@@ -445,10 +445,11 @@ The DIVERGENT record is the most important output IRL produces. It proves that:
    IRL reconciles the agent's report and does not query the exchange.
 
 3. **The divergence was detected automatically**: The IRL engine flagged it in
-   real time, not retroactively. The timestamp of detection is part of the record.
+   real time, not retroactively. The reported execution time is part of the record.
 
-4. **What is and is not protected**: the sealed intent is protected by the
-   anchored `reasoning_hash`. `final_proof` binds the exchange transaction id to
+4. **What is and is not protected**: the anchored `reasoning_hash` is protected;
+   edits to the intent fields are detectable only where the preimage can be
+   recomputed (version 2). `final_proof` binds the exchange transaction id to
    it but is recomputable and not anchored, so a replaced transaction id is
    checked against the venue's own records, not by the hash chain.
 
@@ -490,12 +491,11 @@ Exchange returns execution report
     ▼
 final_proof = SHA-256(reasoning_hash || "||" || exchange_tx_id)   [chain closed]
     │
-    ├── MATCHED   → audit record complete; chain intact; regulator can verify all 9 steps
+    ├── MATCHED   → audit record complete; a reviewer can run the steps that apply to its snapshot version
     ├── DIVERGENT → flagged; reason recorded; chain preserved for forensics
     └── ORPHAN    → execution report received with no matching IRL authorization
 ```
 
-Every node in this chain is cryptographically bound to the nodes above and
-below it. There is no point at which an actor can alter history without
-breaking the hash chain. The professional diagram version of this flow
+Anchored reasoning hashes cannot be changed without breaking Merkle inclusion.
+`final_proof`, the status and the policy verdict are recorded, not anchored. The professional diagram version of this flow
 is in `diagrams.md` (Diagram 1).

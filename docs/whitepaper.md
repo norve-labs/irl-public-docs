@@ -63,7 +63,7 @@ This document specifies the IRL protocol, its three trust layers, and the trust 
 16. [MTA Integration Modes](#16-mta-integration-modes)
 17. [Future Work — Multi-MTA Consensus](#17-future-work--multi-mta-consensus)
 18. [Licensing](#18-licensing)
-19. [Zero-Knowledge Compliance Proofs](#19-zero-knowledge-compliance-proofs-layer-3)
+19. [Zero-Knowledge Policy Proofs (design)](#19-zero-knowledge-policy-proofs-layer-3-design--not-implemented)
 20. [Limitations](#20-limitations)
 21. [High-Volume Mode](#21--high-volume-mode-batch-sealing-for-ai-native-workloads)
 22. [Technical Roadmap](#22--technical-roadmap)
@@ -81,7 +81,7 @@ Every autonomous trading agent has the same structural problem. The agent observ
 
 **Who owns the decision?**
 
-When a trade goes wrong — a flash crash, an unexpected position, a regulatory inquiry — the question is always the same: what did the agent know, what was it permitted to do, and did the exchange execute what was actually authorised? Today, there is no cryptographic answer to any of these questions.
+When a trade goes wrong — a flash crash, an unexpected position, a regulatory inquiry — the question is always the same: what did the agent know, what was it permitted to do, and did the exchange execute what was actually authorised? Ordinary logs do not give a cryptographic answer to these questions.
 
 Existing logging records what happened. It does not record the agent's epistemic state at the moment of decision. It does not prove the agent was operating within its mandate. And it cannot distinguish between a log that was written honestly and one that was reconstructed after the outcome was known.
 
@@ -117,7 +117,7 @@ Each layer adds one guarantee. The layers describe what is proven, not price
 tiers: L1 and L2 ship in the engine and are free to use (§18). L3 is research.
 
 #### L1 — Audit rail
-*Prove what happened. Operational in under a day.*
+*Record what happened, checkably.*
 
 - Pre-execution policy enforcement: the agent's mandate (notional cap, allowed assets and venues, status), optionally scaled by the market regime
 - Cryptographic reasoning seal (SHA-256 over IRL canonical JSON)
@@ -133,7 +133,7 @@ Everything in L1, plus:
 - Regime binding: every authorization is tied to the current Ed25519-signed regime state, and historical regimes cannot be replayed (§8)
 - Any MTA operator: MacroPulse's signed feed, or your own (§16)
 - Compliance dashboard — real-time feed of PENDING, DIVERGENT, and EXPIRED traces
-- Forensic replay — any historical trade reconstructable from its sealed snapshot
+- Forensic replay — the stored record of any historical trade; version 2 hashes are recomputable from the bundle
 
 #### L3 — Prove without revealing (research)
 *For firms where compliance cannot reveal alpha.*
@@ -147,7 +147,7 @@ The ZK layer is not complexity for its own sake. For a fund with proprietary alp
 
 ### 2.3 What IRL Is Not
 
-IRL does not replace anything you already have. It fills a gap that currently has no solution.
+IRL does not replace anything you already have.
 
 | System | Relationship to IRL |
 |--------|-------------------|
@@ -205,13 +205,13 @@ Exchange ──(execution report)──► Agent
 ### 3.2 Three-Layer Trust Model
 
 **Layer 1 — Pre-Execution Gateway**
-The core protocol. Policy enforcement, cryptographic sealing, bitemporal audit, Multi-Agent Registry, post-trade verifier. This is the core layer — deployable in under a day.
+The core protocol. Policy enforcement, cryptographic sealing, bitemporal audit, Multi-Agent Registry, post-trade verifier. This is the core layer.
 
 **Layer 2 — Verified Market Truth**
 Adds the signed heartbeat protocol. Each authorize request must carry a SignedHeartbeat: an Ed25519-signed attestation from the agent that it has observed a recent, valid MTA broadcast. Prevents replay attacks and binds the agent's heartbeat to the specific MTA state it claims to have observed.
 
 **Layer 3 — Sovereign Execution**
-Hardware-enforced execution. Policy runs inside a TEE enclave; the host cannot inspect or tamper with enforcement. Wasm policy modules enable per-client policy customisation without engine forks. ZK proofs enable privacy-preserving compliance for alpha-sensitive deployments.
+Design, not implemented. Hardware-enforced execution: policy would run inside a TEE enclave so the host could not inspect or tamper with enforcement. Wasm policy modules would enable per-client policy customisation without engine forks, and ZK proofs would show policy adherence without revealing alpha-sensitive inputs.
 
 ---
 
@@ -699,7 +699,7 @@ MacroPulse MTA broadcast
 ### 11.2 Properties
 
 - **Binding**: `final_proof` cannot be reproduced without both inputs. An agent claiming a different exchange transaction for the same reasoning — or vice versa — produces a different proof that does not match the stored value.
-- **Non-repudiation**: The agent cannot deny having authorised the trade, because the `reasoning_hash` embeds its model identity, its regime knowledge, and its explicit execution intent.
+- **Attribution**: the trace records the authenticated `agent_id` that requested it. The intent is not signed by the agent, so this is attribution by the operator's authentication, not non-repudiation.
 - **Forward-only**: The bitemporal constraint (`valid_time < txn_time`) ensures the chain reflects forward-only causality. The agent could not have known the exchange transaction ID when the snapshot was sealed.
 
 ---
@@ -710,7 +710,7 @@ MacroPulse MTA broadcast
 
 Every authorised intent, whether matched, divergent, or expired, produces a `Reasoning_Trace_v1` record stored in `irl.reasoning_traces`. The record is:
 
-- **Tamper-evident** — the reasoning_hash is written once on authorize and anchored; altering it breaks Merkle inclusion. Edits to sealed fields are detectable only where the preimage can be recomputed (version 2 `public_view`; see §7.3)
+- **Tamper-evident** — the reasoning_hash is written once on authorize and anchored; altering it breaks Merkle inclusion. Edits to sealed fields are detectable only where the preimage can be recomputed (version 2 `public_view`; see §7.1 and §7.5)
 - **Queryable** — the bitemporal timestamps support as-of queries over the ledger
 - **Checkable** — anyone with the bundle can recompute `final_proof` and check Merkle inclusion and the OpenTimestamps anchor. The version 1 `reasoning_hash` cannot be recomputed from stored records: the full snapshot (including heartbeat fields) is not persisted, `trace_json` is a different structure, and GDPR erasure nulls some fields
 - **Self-describing** — the record stores the MTA hash, policy hash (recorded, not sealed), L_t fingerprint and execution intent
@@ -742,9 +742,9 @@ No access to the agent's internal state, model weights, or strategy is required 
 | Agent forges a retroactive snapshot | Bitemporal constraint: `valid_time < txn_time` enforced at application + DB layer; IRL engine's `txn_time` is authoritative |
 | Agent replays a historical authorize request | Layer 2 heartbeat: monotonic sequence_id + mta_ref binding to current MTA state |
 | Agent claims a different model version post-hoc | model_hash_hex is checked against the MAR at authorize time (the check is not sealed); the separate L_t fingerprint is in the sealed snapshot. Both are declared by the operator |
-| MTA operator signs a false regime | Multi-MTA consensus (§17): k-of-n threshold signing removes single-operator trust |
-| Exchange reports a different asset than executed | Reconciliation: DIVERGENT result with divergence_reason permanently recorded |
-| Someone with database access rewrites the audit log | Changing an anchored reasoning_hash breaks Merkle inclusion. Changing sealed snapshot fields is detectable only where the preimage can be recomputed (§7.3). final_proof, the MATCHED/DIVERGENT status and the policy verdict are not anchored and are not protected by the hash chain |
+| MTA operator signs a false regime | Not mitigated today; multi-MTA consensus (§17) is a design proposal |
+| Exchange reports a different asset than executed | Reconciliation: DIVERGENT result with divergence_reason recorded (not sealed) |
+| Someone with database access rewrites the audit log | Changing an anchored reasoning_hash breaks Merkle inclusion. Changing sealed snapshot fields is detectable only where the preimage can be recomputed (§7.1, §7.5). final_proof, the MATCHED/DIVERGENT status and the policy verdict are not anchored and are not protected by the hash chain |
 | Hindsight bias: agent backdates its reasoning | Bitemporal invariant `valid_time < txn_time`, with `txn_time` set by the engine's clock. The clock is the operator's; anchoring bounds when a record existed |
 
 ### 13.2 What IRL Cannot Prevent
@@ -783,8 +783,8 @@ If C = 0: enclave does not release sigma_trade
 | Heartbeat replay | T_valid < T_txn | Heartbeat freshness | Enclave validates heartbeat |
 | Policy bypass via sidecar bypass | Sidecar in exec path | Orphan detection | No signature = no trade |
 | Rogue admin bypass | None | None | Key material inaccessible to host |
-| Model substitution | L_t mismatch logged | MAR hash check | Enclave rejects invalid MAR proof |
-| Shadow execution | Logged as orphan | MAR cross-reference | Impossible — no unsigned orders accepted |
+| Model substitution | model_hash checked against MAR | model_hash checked against MAR | Design: enclave rejects invalid MAR proof |
+| Shadow execution | Logged as orphan | MAR cross-reference | Design goal: no enclave signature, no order |
 
 ### 13.4 Data Integrity and Trusted Inputs
 
@@ -798,10 +798,10 @@ IRL's cryptographic guarantees are only as strong as the integrity of its inputs
 | Threat | Attack Vector | IRL Mitigation |
 |--------|--------------|---------------|
 | Data poisoning | Injecting false market data to shift regime classification | Signed MTA; rejection of unsigned or unregistered sources |
-| Man-in-the-middle | Intercepting and modifying data in transit | mTLS with certificate pinning + signature verification |
+| Man-in-the-middle | Intercepting and modifying data in transit | Signature verification of MTA responses; mTLS optional |
 | Stale data replay | Submitting old MTA broadcast to invoke prior regime | Heartbeat freshness + monotonic seq_id |
-| Prompt injection | Modifying agent inputs to alter L_t or E_t | L_t fingerprints prompt version hash; deviation detected |
-| Model substitution | Replacing agent model without updating MAR | L_t model hash verified against MAR registration |
+| Prompt injection | Modifying agent inputs to alter L_t or E_t | Not mitigated: L_t is computed from identifiers the operator declares |
+| Model substitution | Replacing agent model without updating MAR | model_hash_hex checked against the MAR registration (declared by the operator) |
 | Forged heartbeat | Fabricating a heartbeat with a favourable regime | Ed25519 signature verification; invalid sig = rejection |
 
 ---
@@ -828,17 +828,17 @@ These are the users we expect to care first. This is our assessment, not a state
 
 **Brokers enabling AI-driven client order flow** — A broker routing orders from an autonomous agent shares liability for that agent's behaviour. IRL creates a clean separation of proof.
 
-**Compliance teams scaling autonomous agent fleets** — One agent is manageable. Ten agents across multiple strategies, venues, and regimes is not. The MAR gives compliance teams visibility and control that logs cannot provide.
+**Compliance teams scaling autonomous agent fleets** — One agent is manageable. Ten agents across multiple strategies, venues, and regimes is not. The MAR gives teams visibility and control in one registry.
 
 **Firms that want a record of their agents' decisions** — An independent, tamper-evident record of what each agent intended before it traded. IRL does not certify or ensure compliance with any regulation.
 
 ### 14.3 The Competitive Moat
 
 The moat is not the software — it is the combination of:
-1. **The seal** — IRL is the entity that issues the cryptographic chain of custody. Any regime signal, any exchange, any agent. The seal is what regulators, LPs, and counterparties trust — not the signal itself.
-2. **Signal agnosticism** — firms with proprietary models don't have to expose their alpha to get a verifiable record. They bring their own MTA. IRL seals it. This is the adoption path that no bundled solution can offer.
+1. **The seal** — IRL is the entity that issues the cryptographic chain of custody. Any regime signal, any exchange, any agent. The seal is what a reviewer checks — not the signal itself.
+2. **Signal agnosticism** — firms with proprietary models don't have to expose their alpha to get a verifiable record. They bring their own MTA. IRL seals it.
 3. **MacroPulse as turnkey MTA** — for firms without a proprietary signal, MacroPulse is the reference operator: signed, versioned, fresh, zero additional infrastructure.
-4. **Incremental adoptability** — L1 in a day; L2 when needed; L3 is a design.
+4. **Incremental adoptability** — start with L1; add L2 when needed; L3 is a design.
 
 Any firm can build logging. No firm can retroactively build a cryptographic chain of custody. IRL captures it at the only moment it can be captured honestly: before the order is placed.
 
@@ -983,7 +983,7 @@ Day 1:   SHADOW_MODE=true: everything sealed, nothing blocked; first agent regis
 Week 1:  Compare IRL's verdicts with live behaviour; compliance reads /irl/orphans daily
 Month 1: Enforcement on; mandates (caps, assets, venues) tuned per agent
 Later:   Signed regime binding (Layer 2) where a regime source is trusted;
-         L3 TEE / ZK when regulatory requirements escalate
+         Later: L3 (design, not implemented)
 ```
 
 ---
@@ -1204,7 +1204,7 @@ IRL enforces a structural separation between public and private audit data:
 ```rust
 // Public (regulator-facing) audit record — disclosed on demand
 pub struct PublicAuditRecord {
-    reasoning_proof  : ZKProof,         // π_t — proves compliance
+    reasoning_proof  : ZKProof,         // π_t — would prove policy adherence (design)
     constraint_checks: Vec<String>,     // ["regime_pass", "leverage_pass", ...]
     execution_hash   : [u8; 32],        // reasoning_hash
 }
