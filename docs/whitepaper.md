@@ -741,7 +741,7 @@ No access to the agent's internal state, model weights, or strategy is required 
 |--------|-----------|
 | Agent forges a retroactive snapshot | Bitemporal constraint: `valid_time < txn_time` enforced at application + DB layer; IRL engine's `txn_time` is authoritative |
 | Agent replays a historical authorize request | Layer 2 heartbeat: monotonic sequence_id + mta_ref binding to current MTA state |
-| Agent claims a different model version post-hoc | model_hash_hex is checked against the MAR at authorize time (the check is not sealed); the separate L_t fingerprint is in the sealed snapshot. Both are declared by the operator |
+| Agent claims a different model version post-hoc | model_hash_hex is checked against the MAR at authorize time (the check is not sealed); the separate L_t fingerprint is in the sealed snapshot. model_hash is declared by the operator; L_t is computed by IRL from identifiers the operator declares |
 | MTA operator signs a false regime | Not mitigated today; multi-MTA consensus (§17) is a design proposal |
 | Exchange reports a different asset than executed | Reconciliation: DIVERGENT result with divergence_reason recorded (not sealed) |
 | Someone with database access rewrites the audit log | Changing an anchored reasoning_hash breaks Merkle inclusion. Changing sealed snapshot fields is detectable only where the preimage can be recomputed (§7.1, §7.5). final_proof, the MATCHED/DIVERGENT status and the policy verdict are not anchored and are not protected by the hash chain |
