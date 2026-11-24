@@ -5,8 +5,8 @@
 > (`00000000-0000-4000-a000-000000000001` for crypto) to run the full
 > authorize → bind-execution flow interactively.
 
-IRL is designed to be incrementally adoptable. You can go from zero to a compliant
-pre-execution gateway in under a day, without changing your existing trading bot.
+IRL is designed to be incrementally adoptable. You can go from zero to a running
+pre-execution mandate gateway without changing your existing trading bot.
 
 ---
 
@@ -362,7 +362,7 @@ Week 1:  Compliance team gets read access to /irl/orphans dashboard
          Enable LAYER2_ENABLED=true — heartbeat anti-replay is production-ready
 Month 1: Add per-regime notional limits per agent in MAR
 Month 3: Wire MacroPulse MTA or your own MtaClient for regime-aware enforcement
-Later:   L3 TEE / ZK proofs when regulatory requirements escalate
+Later:   L3 (design, not implemented)
 ```
 
 You don't need to commit to the full stack on day one.

@@ -38,7 +38,7 @@ The full authorize → bind flow:
 | Document | Description |
 |---|---|
 | [Whitepaper](docs/whitepaper.md) | Full IRL protocol specification, cryptographic design, bitemporal model |
-| [Getting Started](docs/getting-started.md) | Run IRL in under a day: Docker, environment variables, first agent |
+| [Getting Started](docs/getting-started.md) | Run IRL: Docker, environment variables, first agent |
 | [Developer Guide](docs/developer-guide.md) | SDK usage (Python, TypeScript, Go), API reference, error codes |
 | [Case Studies](docs/case-studies.md) | Equity fund, prop desk, quant fund deployment examples |
 | [Exchange Integration](docs/exchange-integration.md) | FIX protocol tags, REST order metadata, venue-specific notes |

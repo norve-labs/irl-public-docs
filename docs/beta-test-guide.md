@@ -14,7 +14,7 @@ The full `authorize → bind` audit chain:
 2. IRL seals it, checks regime permissions, returns `reasoning_hash` + `authorization_id`
 3. You "place" the order (simulated — no real exchange required)
 4. Your agent calls **`POST /irl/bind-execution`** with the exchange confirmation
-5. IRL produces a final immutable proof record: `MATCHED` or `DIVERGENT`
+5. IRL records the outcome: `MATCHED` or `DIVERGENT`, bound to the exchange order id
 
 All traces land in a bitemporal audit table. Nothing is deleted.
 
