@@ -429,7 +429,7 @@ This is **not** RFC 8785 (JCS): number formatting differs (JCS uses the ECMAScri
 
 Plain `serde_json::to_string()` does **not** guarantee field ordering across crate versions or struct changes and is not used for audit hashing.
 
-The recommended way to check a hash is the open-source verifier. For `snapshot_version` 2 bundles, the `public_view` preimage can also be reproduced in Python, as long as no float is below `1e-4` in magnitude or written in exponent form (Python prints `5e-05` where the engine prints `0.00005`):
+The recommended way to check a hash is the open-source verifier. For `snapshot_version` 2 bundles, the `public_view` preimage can also be reproduced in Python, as long as no non-zero float is below `1e-4` in magnitude or written in exponent form (Python prints `5e-05` where the engine prints `0.00005`):
 ```python
 import hashlib, json
 canonical = json.dumps(public_view, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -706,10 +706,10 @@ MacroPulse MTA broadcast
 
 Every authorised intent, whether matched, divergent, or expired, produces a `Reasoning_Trace_v1` record stored in `irl.reasoning_traces`. The record is:
 
-- **Tamper-evident** — the reasoning_hash is written once on authorize; altering it or any sealed field breaks verification
+- **Tamper-evident** — the reasoning_hash is written once on authorize and anchored; altering it breaks Merkle inclusion. Edits to sealed fields are detectable only where the preimage can be recomputed (version 2 `public_view`; see §7.3)
 - **Queryable** — the bitemporal timestamps support as-of queries over the ledger
 - **Checkable** — anyone with the bundle can recompute `final_proof` and check Merkle inclusion and the OpenTimestamps anchor. The version 1 `reasoning_hash` cannot be recomputed from stored records: the full snapshot (including heartbeat fields) is not persisted, `trace_json` is a different structure, and GDPR erasure nulls some fields
-- **Self-contained** — the record embeds the MTA hash, policy hash, L_t fingerprint, and full execution intent — no external references are required to verify the chain
+- **Self-describing** — the record stores the MTA hash, policy hash (recorded, not sealed), L_t fingerprint and execution intent
 
 ### 12.2 Forensic Replay
 
@@ -1393,7 +1393,7 @@ divergence_reason: "Asset mismatch: authorized ETH-PERP, executed BTC-PERP"
 final_proof: 47831b5a27bce55baee0577cc5bdf8a7239637743150713b692260472a3c888f
 ```
 
-**For a regulator:** The DIVERGENT record proves two things simultaneously — the firm's intent was legitimate (ETH-PERP, within policy), and the execution deviated from that intent. The engine records the divergence; the `DIVERGENT` status is recorded, not sealed. A DIVERGENT record shows that the check ran, not that anyone did something wrong.
+**For a regulator:** The DIVERGENT record shows the authorized intent (ETH-PERP, sealed) and that the reported execution (BTC-PERP) did not match it; the status and the policy verdict are recorded, not sealed. The engine records the divergence; the `DIVERGENT` status is recorded, not sealed. A DIVERGENT record shows that the check ran, not that anyone did something wrong.
 
 ---
 
