@@ -1393,7 +1393,7 @@ divergence_reason: "Asset mismatch: authorized ETH-PERP, executed BTC-PERP"
 final_proof: 47831b5a27bce55baee0577cc5bdf8a7239637743150713b692260472a3c888f
 ```
 
-**For a regulator:** The DIVERGENT record shows the authorized intent (ETH-PERP, sealed) and that the reported execution (BTC-PERP) did not match it; the status and the policy verdict are recorded, not sealed. The engine records the divergence; the `DIVERGENT` status is recorded, not sealed. A DIVERGENT record shows that the check ran, not that anyone did something wrong.
+**For a regulator:** The DIVERGENT record shows the authorized intent (ETH-PERP, sealed) and that the reported execution (BTC-PERP) did not match it; the status and the policy verdict are recorded, not sealed. A DIVERGENT record shows that the check ran, not that anyone did something wrong.
 
 ---
 
