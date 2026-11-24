@@ -1,7 +1,19 @@
 # IRL — Intent, Reasoning, and Liability
-## Whitepaper v5.0
+## Whitepaper v5.1
 
 *IRL · October 2026 · [github.com/norve-labs/irl](https://github.com/norve-labs/irl) · [norve.dev](https://norve.dev)*
+
+> **What changed in v5.1 (November 2026).** Corrections, not new features.
+> IRL is described as a mandate gateway, not a compliance gateway, and the
+> regulatory table in §12.3 is replaced by an informative note: IRL does not
+> certify or ensure compliance with any regulation. The canonical JSON used for
+> hashing is specified as it is implemented (§7.1); it is not RFC 8785 (JCS).
+> Statements about what the hash chain proves are narrowed: the policy verdict
+> and the MATCHED/DIVERGENT status are recorded but not sealed.
+>
+> **Status.** Layer 3 (TEE signing, Wasm policy modules, zero-knowledge proofs)
+> and multi-operator MTA consensus are design proposals and are not implemented.
+> Sections that describe them state goals, not shipped behaviour.
 
 > **What changed in v5.0.** IRL is now its own project: free to use, source
 > available under FSL-1.1-ALv2 (§18), and independent of any regime provider.
@@ -17,9 +29,9 @@
 
 Autonomous trading agents make thousands of decisions per day without a human in the loop. Current infrastructure records what they did — not what they knew, what they were permitted to do, or whether the exchange executed what was actually authorised. This gap between agent reasoning and market action is the **Ownership Gap**: the absence of a cryptographic chain of custody from decision to execution.
 
-IRL (Intent, Reasoning, and Liability) is a **signal-agnostic** pre-execution compliance gateway that closes this gap. Before any order leaves the firm, IRL seals the agent's epistemic state — its knowledge of market regime, its model identity, its authorised intent — into a tamper-evident `CognitiveSnapshot`. That snapshot is cryptographically bound to the exchange confirmation, creating an immutable audit chain that no party can alter after the fact.
+IRL (Intent, Reasoning, and Liability) is a **signal-agnostic** pre-execution mandate gateway that addresses this gap. Before any order leaves the firm, IRL seals the agent's epistemic state — its knowledge of market regime, its model identity, its authorised intent — into a tamper-evident `CognitiveSnapshot`. That snapshot is cryptographically bound to the exchange confirmation, creating a tamper-evident audit chain: once a record is anchored, editing the sealed snapshot or the order binding fails verification.
 
-IRL needs no external signal to run: each agent's own mandate (notional cap, allowed assets and venues, model identity, status) is the policy. Optionally, IRL binds every decision to a cryptographically attested market regime through an abstract Market Truth Anchor (MTA) interface. MacroPulse operates one such signed regime feed; firms with proprietary regime models or multi-operator consensus pipelines connect their own. The seal mechanism, the audit chain, and the compliance guarantees are identical in every mode.
+IRL needs no external signal to run: each agent's own mandate (notional cap, allowed assets and venues, model identity, status) is the policy. Optionally, IRL binds every decision to a cryptographically attested market regime through an abstract Market Truth Anchor (MTA) interface. MacroPulse operates one such signed regime feed; firms with proprietary regime models or multi-operator consensus pipelines connect their own. The seal mechanism and the audit chain are identical in every mode.
 
 AI agents increasingly trade through tool interfaces rather than custom code. The IRL Gateway exposes IRL as a Model Context Protocol (MCP) server, so any MCP-capable agent trades under a mandate it cannot break, with its rationale sealed into every trace.
 
@@ -85,7 +97,7 @@ This is the **Ownership Gap**: the absence of a chain of custody between AI reas
 
 IRL closes the Ownership Gap before the order is placed. The agent's epistemic state — its knowledge of market regime, its model identity, its authorised intent — is sealed into a `CognitiveSnapshot` before any communication with the exchange. That seal becomes the root of a cryptographic chain that terminates only when the exchange confirms execution.
 
-The chain cannot be forged, cannot be altered retroactively, and cannot be selectively presented. If the exchange executed something different from what was authorised, the divergence is provable and permanent.
+Edits to the sealed snapshot or to the order binding of an anchored record are detectable: they break the hash chain and fail verification. The policy verdict and the `MATCHED`/`DIVERGENT` status are recorded alongside the trace but are not part of the sealed hash, so the hash chain alone does not protect them. Anchoring also does not prove that a bundle is complete; omitted records are not detected by the hash chain alone.
 
 ---
 
@@ -93,7 +105,7 @@ The chain cannot be forged, cannot be altered retroactively, and cannot be selec
 
 ### 2.1 One-Line Answer
 
-IRL is a **pre-execution compliance gateway** that sits between your autonomous trading agent and the exchange — sealing the agent's reasoning into a cryptographic audit trail before any order is placed.
+IRL is a **pre-execution mandate gateway** that sits between your autonomous trading agent and the exchange — sealing the agent's reasoning into a cryptographic audit trail before any order is placed.
 
 ### 2.2 Three Layers
 
@@ -104,7 +116,7 @@ tiers: L1 and L2 ship in the engine and are free to use (§18). L3 is research.
 *Prove what happened. Operational in under a day.*
 
 - Pre-execution policy enforcement: the agent's mandate (notional cap, allowed assets and venues, status), optionally scaled by the market regime
-- Cryptographic reasoning seal (SHA-256 / RFC 8785)
+- Cryptographic reasoning seal (SHA-256 over IRL canonical JSON)
 - Bitemporal audit ledger (tamper-evident, replay-safe)
 - Multi-Agent Registry (fleet identity and governance)
 - Post-trade verifier (MATCHED / DIVERGENT / EXPIRED lifecycle)
@@ -205,7 +217,7 @@ Hardware-enforced execution. Policy runs inside a TEE enclave; the host cannot i
 
 The Market Truth Anchor (MTA) is an **abstract interface** — any cryptographically attested external regime signal that satisfies the MTA protocol. IRL does not depend on any specific operator. It depends on a signed, versioned, fresh regime state that it can independently verify. Whatever produces that state is the MTA for that deployment.
 
-This matters: a quant firm running its own HMM, a broker aggregating a multi-vendor consensus, or a regulatory body operating a public regime oracle can all serve as MTA operators. The IRL seal, audit chain, and compliance guarantees are identical regardless of which operator produced the MTA state.
+This matters: a quant firm running its own HMM, a broker aggregating a multi-vendor consensus, or a regulatory body operating a public regime oracle can all serve as MTA operators. The IRL seal and audit chain are identical regardless of which operator produced the MTA state.
 
 MacroPulse operates the **reference MTA implementation**: a Hidden Markov Model / Principal Component Analysis pipeline that classifies macro market conditions into a small number of discrete regimes. Each output is Ed25519-signed and broadcast as a `RegimeBroadcast`. This is the turnkey path — zero additional infrastructure required. Firms with proprietary regime models use the `MtaClient` trait to plug in their own source (see §16).
 
@@ -228,7 +240,7 @@ pub struct MtaState {
 
 `regime_id` and `regime_label` are fully opaque to IRL — the engine does not pattern-match on them. The three normalized constraint fields (`risk_level`, `max_notional_scale`, `allowed_sides`) are what the policy engine reads. An operator running a 4-state HMM, a 2-state bull/bear model, a VIX-based classifier, or a continuous credit-spread score all satisfy this contract by mapping their output to these three fields.
 
-The `hash` field is SHA-256 of the RFC 8785 canonical JSON of the regime payload, computed before the signature is applied. This hash is embedded in every `CognitiveSnapshot`, cryptographically binding each agent decision to the specific MTA broadcast the agent was operating under.
+The `hash` field is SHA-256 of the canonical JSON (keys sorted, no whitespace) of the regime payload, computed before the signature is applied. This hash is embedded in every `CognitiveSnapshot`, cryptographically binding each agent decision to the specific MTA broadcast the agent was operating under.
 
 ### 4.3 Signature Verification
 
@@ -405,26 +417,27 @@ When `max_notional_scale = 0.0` (e.g., a fully defensive regime state), no new n
 
 ## 7. Cryptographic Sealing
 
-### 7.1 RFC 8785 Canonicalization
+### 7.1 IRL Canonical JSON
 
-The `CognitiveSnapshot` is serialised using RFC 8785 JSON Canonicalization Scheme before hashing. RFC 8785 guarantees:
-- Object keys are sorted lexicographically (Unicode code point order)
+The `CognitiveSnapshot` is serialised to IRL canonical JSON before hashing:
+- Object keys are sorted recursively by code point
 - No whitespace outside of string values
-- Numbers are serialised without unnecessary precision
-- The output is deterministic across all implementations, languages, and library versions
+- Strings and numbers are written as the engine serialises them; numbers are **not** normalised (`2.50` stays `2.50`)
 
-Standard `serde_json::to_string()` does **not** guarantee field ordering across crate versions or struct changes and must not be used for audit hashing.
+This is **not** RFC 8785 (JCS). JCS also normalises numbers with the ECMAScript algorithm, so a generic JCS library can produce different bytes for the same record. To verify a record, keep the numbers exactly as they appear in the stored or exported JSON and use the open-source verifier, or reproduce the rules above.
 
-The canonical form can be independently reproduced by any party from the stored snapshot fields:
+Plain `serde_json::to_string()` does **not** guarantee field ordering across crate versions or struct changes and is not used for audit hashing.
+
+For records whose numbers are written as integers or as the shortest form, the canonical form can be reproduced with:
 ```python
 import json
-canonical = json.dumps(snapshot_dict, sort_keys=True, separators=(',', ':'))
+canonical = json.dumps(snapshot_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 ```
 
 ### 7.2 Reasoning Hash
 
 ```
-reasoning_hash = SHA-256(RFC_8785_canonical(S_t))
+reasoning_hash = SHA-256(irl_canonical(S_t))
 ```
 
 The `reasoning_hash` is:
@@ -441,38 +454,32 @@ Every trace is stored with two time dimensions:
 - **valid_time** — when the agent claims to have reasoned (business time)
 - **txn_time** — when the IRL engine recorded the intent (transaction time)
 
-Neither dimension can be altered after the fact. Queries over the bitemporal ledger can reconstruct the exact state of the world as it was known at any historical point — not just what happened, but what was believed to be true when it happened.
+After sealing, both timestamps are part of the hashed record, so changing either one breaks verification. Queries over the bitemporal ledger can reconstruct the exact state of the world as it was known at any historical point — not just what happened, but what was believed to be true when it happened.
 
-### 7.4 RFC 8785 — Why This Format
+### 7.4 Why JSON
 
-IRL deviates from a purely binary serialisation specification by choice. The primary requirement for snapshot serialisation is determinism: two independent implementations must produce byte-for-byte identical output from the same logical input, or their hashes will diverge and the audit guarantee collapses. A bespoke binary format meets this requirement but introduces implementation risk — any deviation in field ordering, padding, or encoding between implementations breaks interoperability silently.
+The primary requirement for snapshot serialisation is determinism: two independent implementations must produce byte-for-byte identical output from the same stored record, or their hashes diverge. IRL uses JSON with sorted keys and no whitespace rather than a binary format because:
 
-RFC 8785 provides determinism through precisely specified transformation rules:
-- Object keys sorted lexicographically by Unicode code point — no insertion-order ambiguity
-- Floating-point numbers follow the ECMAScript serialisation algorithm (IEEE 754, shortest round-trip) — no decimal string ambiguity
-- Output is UTF-8 with no BOM, no trailing whitespace, no line breaks
-
-The practical advantages for an audit protocol:
-
-| Concern | Advantage |
-|---------|-----------|
-| Auditor accessibility | Any RFC 8785–compliant library, in any language, reproduces canonical bytes — no proprietary tooling |
-| Cross-language verification | JCS implementations exist in Rust, Python, Go, Java, TypeScript — cross-testable against RFC test vectors |
-| Regulatory submission | JSON is the lingua franca of financial regulatory reporting — no translation layer |
+| Concern | Reason |
+|---------|--------|
+| Auditor accessibility | The rules in §7.1 are short and can be reproduced in any language; the open-source verifier implements them |
 | Debug transparency | Records are human-readable during incident investigation |
+| Interoperability | JSON is widely used for reporting and data exchange — no translation layer |
 
-The trade-off is serialisation overhead relative to a compact binary format. This is acceptable: the performance-critical path operates on in-memory structs. RFC 8785 serialisation occurs once per snapshot for hashing and storage, not in a tight execution loop.
+The known limitation is numbers: IRL keeps each number as the engine serialised it instead of normalising it, so verifiers must work on the exported text, not on re-parsed and re-printed values. A move to full RFC 8785 (JCS) would require a new `snapshot_version` (§7.5) and is not implemented.
 
-### 7.5 Serialisation Versioning
+Serialisation occurs once per snapshot for hashing and storage, not in a tight execution loop.
 
-Every Cognitive Snapshot includes a `ser_version` field in its metadata envelope, declaring the serialisation format used to produce the `reasoning_hash`. This field is included in the hash input — a snapshot serialised under `0x0001` (JCS) and an otherwise identical snapshot serialised under `0x0002` (binary) produce different hashes by design. This makes the serialisation format an immutable, auditable property of every sealed record.
+### 7.5 Snapshot Versioning
+
+Each trace stores a `snapshot_version` next to its `reasoning_hash`. It is stored with the trace, not inside the hashed bytes; a verifier uses it to choose the recomputation rules:
 
 ```
-ser_version 0x0001 = RFC 8785 JCS  (current)
-ser_version 0x0002 = binary        (reserved for future)
+snapshot_version 1 = SHA-256 over the whole snapshot in IRL canonical JSON (§7.1)  (current default)
+snapshot_version 2 = split seal: public fields plus a commitment to private fields  (behind a flag, off by default)
 ```
 
-If performance profiling demonstrates that RFC 8785 overhead is material, IRL can adopt binary serialisation by incrementing `ser_version`, without invalidating any existing traces. All existing traces remain verifiable under `0x0001` indefinitely.
+Version 2 lets an auditor recompute the hash from the public bundle without seeing private order detail. It stays off until the version-2-aware verifier ships. Existing version 1 traces remain verifiable under version 1 rules.
 
 ### 7.6 Merkle Aggregation
 
@@ -483,7 +490,7 @@ Period_Root = MerkleRoot([reasoning_hash_1, reasoning_hash_2, ..., reasoning_has
 Proof(H_ti) = Merkle inclusion proof from H_ti to Period_Root
 ```
 
-`Period_Root` is anchored to an immutable external ledger (L2 rollup or permissioned ledger, e.g. Hyperledger Besu), providing tamper evidence independent of operator infrastructure.
+`Period_Root` is anchored on Bitcoin through OpenTimestamps, providing tamper evidence that does not depend on the operator's infrastructure. (Earlier drafts proposed an L2 rollup or a permissioned ledger; that is not implemented.)
 
 ---
 
@@ -696,7 +703,7 @@ MacroPulse MTA broadcast
 
 Every authorised intent, whether matched, divergent, or expired, produces a `Reasoning_Trace_v1` record stored in `irl.reasoning_traces`. The record is:
 
-- **Immutable** — the reasoning_hash field is written once on authorize and cannot be altered
+- **Tamper-evident** — the reasoning_hash is written once on authorize; altering it or any sealed field breaks verification
 - **Queryable** — the bitemporal timestamps support as-of queries over the ledger
 - **Reproducible** — given the same snapshot fields, any compliant implementation can recompute reasoning_hash and final_proof and verify they match the stored values
 - **Self-contained** — the record embeds the MTA hash, policy hash, L_t fingerprint, and full execution intent — no external references are required to verify the chain
@@ -705,7 +712,7 @@ Every authorised intent, whether matched, divergent, or expired, produces a `Rea
 
 `GET /irl/trace/:trace_id` returns the complete record. An auditor can:
 
-1. Recompute `reasoning_hash` from the stored snapshot fields using RFC 8785 + SHA-256
+1. Recompute `reasoning_hash` from the stored snapshot fields using IRL canonical JSON (§7.1) + SHA-256
 2. Verify the MTA signature using the MacroPulse public key
 3. Confirm the bitemporal constraint
 4. Recompute `final_proof` from `reasoning_hash + exchange_tx_id`
@@ -713,18 +720,9 @@ Every authorised intent, whether matched, divergent, or expired, produces a `Rea
 
 No access to the agent's internal state, model weights, or strategy is required at any step.
 
-### 12.3 Regulatory Alignment
+### 12.3 Regulatory Context (informative)
 
-| Regulatory Requirement | IRL Mechanism | Evidence Produced |
-|------------------------|---------------|-------------------|
-| Decision auditability (EU AI Act Art. 12) | CognitiveSnapshot + reasoning_hash | Reproducible hash of complete decision state |
-| Transparency to regulators (Art. 13) | ZK-SNARK public verifier (L3) | Compliance proved without alpha disclosure |
-| Traceability to execution | final_proof = SHA-256(reasoning_hash \|\| exchange_tx_id) | Cryptographic link between reasoning and order |
-| Contemporaneous recordkeeping | Bitemporal timestamps (valid_time, txn_time) | Provable record of what was known when |
-| Pre-trade risk controls (SEC Rule 15c3-5) | Policy Engine (pre-execution) | Verifiable enforcement before order emission |
-| Human oversight enforcement | Hard halt on policy violation | Non-compliant actions cannot be executed |
-| Non-repudiation | Execution proof + Merkle anchoring (L2) / TEE signing (L3) | Tamper-evident record; full NR at L3 |
-| Fleet-level governance (MiFID II, DORA) | Multi-Agent Registry | Per-agent identity, policy, and risk audit trail |
+*Context, not a compliance claim.* Rules such as MiFID II RTS 6, FINRA Rule 3110, SEC Rule 15c3-5 and the EU AI Act deal with pre-trade controls, supervision and record-keeping. IRL does not certify or ensure compliance with any of them, and Norve is not a compliance provider. What IRL records is listed in §12.1 and in [Regulatory context](compliance/regulatory-context.md); whether those records are useful for your obligations depends on who you are and where you operate. Not legal advice.
 
 ---
 
@@ -751,11 +749,11 @@ IRL is a pre-execution gateway, not a comprehensive fraud prevention system. It 
 - Verify the truthfulness of the agent's `valid_time` claim (only that it precedes `txn_time`)
 - Replace position-level risk management systems
 
-IRL's guarantee is narrower and stronger: *if a trade was executed, there exists an immutable cryptographic record of what was authorised before it happened, and whether the execution matched that authorisation.*
+IRL's guarantee is narrower: *if a trade was executed through IRL, there exists a tamper-evident cryptographic record of what was authorised before it happened, and whether the execution matched that authorisation.*
 
 ### 13.3 Sovereign Gateway (Layer 3)
 
-In Layers 1 and 2, IRL enforces compliance and produces verifiable records — but it does not control the execution channel. A sufficiently privileged operator could, in principle, bypass the sidecar and route orders directly to the exchange. Layer 3 eliminates this attack surface.
+In Layers 1 and 2, IRL enforces the agent's mandate and produces verifiable records — but it does not control the execution channel. A sufficiently privileged operator could, in principle, bypass the sidecar and route orders directly to the exchange. Layer 3 eliminates this attack surface.
 
 In the Sovereign Gateway configuration, the exchange API credentials are stored exclusively within a Trusted Execution Environment (TEE — Intel TDX or AMD SEV). The host OS, agent process, and all operator-level personnel cannot access these credentials. A trade order can only be signed if the Enclave Signer receives a **Double-Green signal**: simultaneous valid attestations from both the MTA policy layer (L1) and the Multi-Agent Registry (L2).
 
@@ -770,7 +768,7 @@ If C = 0: enclave does not release sigma_trade
           no trade is possible — key material is inaccessible outside the enclave
 ```
 
-**Key property**: In Layer 3, the existence of a confirmed exchange trade is itself proof of compliance. The enclave is physically incapable of signing a trade that violates the MacroPulse regime policy. There is no bypass path.
+**Design goal (not implemented)**: in Layer 3, an order could only be signed with the exchange keys if the enclave released the signature, so an order that fails the policy could not be signed with those keys. This depends on the TEE's own security assumptions and on the exchange account accepting only enclave-signed orders.
 
 | Threat | L1 Mitigation | L2 Mitigation | L3 Mitigation |
 |--------|--------------|--------------|--------------|
@@ -1089,7 +1087,7 @@ MTA Node D (Consortium)    ──┤
 MTA Node E (Client-run)    ──┘
 ```
 
-Each node independently signs a `RegimeBroadcast` over RFC 8785 canonical JSON:
+Each node independently signs a `RegimeBroadcast` over canonical JSON (keys sorted, no whitespace):
 
 ```json
 {
@@ -1267,7 +1265,7 @@ This appendix walks through two complete IRL traces captured from a live deploym
 
 **Step 1 — MTA Broadcast**
 
-The canonical JSON signed by MacroPulse (RFC 8785 — keys sorted, no whitespace):
+The canonical JSON signed by MacroPulse (keys sorted, no whitespace):
 
 ```json
 {"macro_regime":"recovery","model_version":"v1","regime_id":1,"timestamp":"2026-03-23T02:45:07Z"}
@@ -1326,7 +1324,7 @@ txn_time:   2026-03-23T02:45:08.982Z
 Gap: 498ms — agent could not have seen the future ✓
 ```
 
-**Snapshot sealed (RFC 8785 canonical excerpt):**
+**Snapshot sealed (canonical JSON excerpt):**
 ```json
 {"execution":{"action":{"size":2.0,"type":"Long"},"asset":"BTC-PERP","client_order_id":"ord-smoke-001","limit_price":null,"notional":120000.0,"order_type":"MARKET","quantity":2.0,"venue_id":"XNAS"},"feature_schema_id":"schema-prod-v1","latent_fingerprint":"67636f72...","mta_hash":"3fa9e02a...","mta_regime_id":1,"trace_id":"96e67b89-...","txn_time":1742694308982,"valid_time":1742694308484}
 ```
@@ -1372,7 +1370,7 @@ final_proof = SHA-256("b3971de1..." || "||" || "exch-tx-9001")
 }
 ```
 
-**For a regulator:** This record can be independently verified by (1) recomputing `reasoning_hash` from the stored fields using RFC 8785 + SHA-256, (2) verifying the MTA signature using the operator's registered public key, (3) confirming `valid_time < txn_time`, (4) recomputing `final_proof`. No access to the agent's model or strategy is required.
+**For a regulator:** This record can be independently verified by (1) recomputing `reasoning_hash` from the stored fields using IRL canonical JSON + SHA-256, (2) verifying the MTA signature using the operator's registered public key, (3) confirming `valid_time < txn_time`, (4) recomputing `final_proof`. No access to the agent's model or strategy is required.
 
 ---
 
@@ -1409,7 +1407,7 @@ IRL Engine — MtaState cached
 MAR check → Policy → L_t fingerprint → Bitemporal constraint
     │ All pass → CognitiveSnapshot S_t assembled
     ▼
-reasoning_hash = SHA-256(RFC_8785_canonical(S_t))         [reasoning locked]
+reasoning_hash = SHA-256(irl_canonical(S_t))               [reasoning locked]
     │ Agent places order (reasoning_hash in order metadata)
     ▼
 Exchange returns execution report
@@ -1787,7 +1785,7 @@ The gateway is an MCP server ([github.com/norve-labs/irl-gateway](https://github
 
 `execute_trade` requires a written rationale. The gateway builds a context
 (rationale, symbol, side, quantity, reference price, venue, model id, client
-order id), hashes its RFC 8785-style canonical JSON with SHA-256, and sends the
+order id), hashes its canonical JSON (keys sorted, no whitespace) with SHA-256, and sends the
 hash as `prompt_version = "ctx-sha256:<hex>"`. The hash is therefore part of the
 sealed `reasoning_hash`. The plaintext stays in the operator's local journal, so
 anyone holding a journal entry can recompute the hash and match it to the

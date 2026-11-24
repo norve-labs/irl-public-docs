@@ -587,7 +587,7 @@ IRL adds <200 µs (p99) to the authorize path, measured end-to-end on the server
 | MAR lookup (in-memory cache) | ~0 µs |
 | Policy evaluation | O(1) |
 | SHA-256 seal | ~1–2 µs |
-| JSON canonicalization (RFC 8785) | ~50–100 µs |
+| JSON canonicalization | ~50–100 µs |
 | Async DB write (non-blocking) | ~0 µs blocking |
 
 The DB write is async and does not block the response. Your order placement proceeds

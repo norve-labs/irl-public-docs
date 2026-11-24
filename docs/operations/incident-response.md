@@ -291,7 +291,7 @@ to the DB and modifies historical traces, the cryptographic chain is broken.
    hash of its `trace_json`:
    ```sql
    -- Rows where stored hash diverges from expected are suspect.
-   -- Recomputation must be done in application code (RFC 8785 canonical JSON + SHA-256).
+   -- Recomputation must be done in application code (IRL canonical JSON, whitepaper §7.1, + SHA-256).
    ```
 2. Identify the attack vector: direct DB access, compromised migration tooling,
    or compromised operator credentials.

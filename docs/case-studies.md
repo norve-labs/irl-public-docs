@@ -23,7 +23,7 @@ The MTA operator (MacroPulse, as the reference implementation) has just broadcas
 ### Step 1 — MTA Broadcast
 
 The MTA operator outputs a regime state and signs it. The IRL engine fetches and
-verifies the payload. The canonical JSON that was signed (RFC 8785 — keys sorted
+verifies the payload. The canonical JSON that was signed (keys sorted
 lexicographically, no whitespace) is:
 
 ```json
@@ -148,19 +148,20 @@ valid_time_ms < txn_time_ms ✓  (498ms gap — agent could not have seen the fu
 
 **3e. Cognitive Snapshot sealed**
 
-The full `CognitiveSnapshot` is serialised to RFC 8785 canonical JSON.
+The full `CognitiveSnapshot` is serialised to IRL canonical JSON (keys sorted, no
+whitespace; not RFC 8785/JCS, see whitepaper §7.1).
 A representative excerpt of the canonical form (keys sorted, no whitespace):
 
 ```json
 {"execution":{"action":{"size":2.0,"type":"Long"},"asset":"BTC-PERP","client_order_id":"ord-smoke-001","limit_price":null,"notional":120000.0,"order_type":"MARKET","quantity":2.0,"venue_id":"XNAS"},"feature_schema_id":"schema-prod-v1","heartbeat":{"mta_ref":"3fa9e02a...","regime_id":1,"sequence_id":0,"signature":"","timestamp_ms":1742694308484},"latent_fingerprint":"67636f72...","mta_hash":"3fa9e02a...","mta_regime_id":1,"mta_version":"v1","ser_version":1,"trace_id":"96e67b89-05a7-4a47-a756-04c9abe69d39","txn_time":1742694308982,"valid_time":1742694308484}
 ```
 
-> **`ser_version`:** The serialisation version (`1` for the initial binary/JSON
-> format) is included in the snapshot so that any future format migration does
-> not break hash verification. An auditor must use the serialiser corresponding
-> to `ser_version` to reproduce the `reasoning_hash`. The full canonical JSON
+> **`snapshot_version`:** Each trace stores its seal version (`1` = SHA-256 over
+> the whole snapshot in IRL canonical JSON) next to the `reasoning_hash`, not
+> inside the hashed bytes. An auditor uses the rules for that version
+> (whitepaper §7.5) to reproduce the `reasoning_hash`. The full canonical JSON
 > (with all fields expanded) is stored verbatim in the system logs and can be
-> copy-pasted, canonicalised with any RFC 8785-compliant library, and SHA-256
+> copy-pasted, canonicalised as described in whitepaper §7.1, and SHA-256
 > hashed to reproduce the exact `reasoning_hash` shown below.
 
 The `reasoning_hash` is the SHA-256 of this canonical JSON:
@@ -171,8 +172,8 @@ reasoning_hash = SHA-256(canonical_json(S_t))
 ```
 
 Any compliant implementation given the same snapshot fields will produce the
-same `reasoning_hash`. This is guaranteed by RFC 8785's deterministic key
-ordering and the absence of whitespace.
+same `reasoning_hash`. This follows from the deterministic key ordering, the absence of
+whitespace, and keeping each number exactly as the engine serialised it.
 
 ---
 
@@ -327,8 +328,8 @@ A regulator receiving this audit record can independently verify the entire
 chain without accessing the agent's internal state or the firm's systems:
 
 1. **Re-derive `reasoning_hash`**: Retrieve the full canonical JSON from the
-   system logs (identified by `trace_id`). Apply RFC 8785 canonicalization and
-   SHA-256 hash the result using the serializer for `ser_version: 1`. If it
+   system logs (identified by `trace_id`). Apply IRL canonicalization (whitepaper §7.1) and
+   SHA-256 hash the result using the rules for `snapshot_version` 1. If it
    matches the stored `reasoning_hash`, the snapshot has not been altered since
    sealing.
 
@@ -477,7 +478,7 @@ MAR check → Policy check → L_t fingerprint → Bitemporal constraint
     │
     │ All pass → CognitiveSnapshot S_t assembled (includes ser_version)
     ▼
-reasoning_hash = SHA-256(RFC 8785 canonical JSON of S_t)    [reasoning locked]
+reasoning_hash = SHA-256(IRL canonical JSON of S_t)         [reasoning locked]
     │
     │ Agent sends order to exchange
     │ client_order_id used to look up pre-authorized intent on execution report arrival
