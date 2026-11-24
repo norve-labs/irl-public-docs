@@ -315,16 +315,16 @@ mean the policy that was actually applied differed from what the MTA broadcast.
 
 **What this record proves:**
 - The agent knew `recovery` regime (mta_hash) before it acted — and those constraints were signed by the MTA operator
-- Its model was the registered version (model_hash_hex matches MAR; L_t fingerprint is in the audit record)
+- The model hash it declared matched the registered one at authorize time (the check is not sealed; the declared L_t fingerprint is in the sealed snapshot)
 - Its intent was authorized before the order was placed (`valid_time_ms` 498ms before `txn_time_ms`)
 - The exact policy limits that applied are committed to via `policy.hash`
-- The exchange executed exactly what was authorized (MATCHED, within 0.01% quantity tolerance)
-- The chain is tamper-evident: changing any field invalidates `reasoning_hash` and `final_proof`
+- The execution the agent reported matched what was authorized (MATCHED, within 0.01% quantity tolerance). IRL reconciles the agent's report; it does not query the exchange
+- The chain is tamper-evident where it is anchored: changing an anchored `reasoning_hash` breaks Merkle inclusion. `final_proof` and the status are recorded, not anchored
 
 ### What This Means for a Regulator
 
-A regulator receiving this audit record can independently verify the entire
-chain without accessing the agent's internal state or the firm's systems:
+A reviewer receiving this audit record can check it as follows. Step 1 needs the
+sealed snapshot from the operator's systems; the other steps do not:
 
 1. **Re-derive `reasoning_hash`**: Retrieve the full canonical JSON from the
    system logs (identified by `trace_id`). Apply IRL canonicalization (whitepaper §7.1) and
@@ -346,17 +346,17 @@ chain without accessing the agent's internal state or the firm's systems:
 
 4. **Confirm the bitemporal constraint**: `valid_time_ms (08484) < txn_time_ms (08982)`.
    The 498ms delta proves the agent's reasoning preceded the IRL engine's receipt
-   of the intent — the agent could not have known the future MTA state. Both
-   timestamps are Unix milliseconds; no conversion is required. The IRL sidecar
-   uses a hardware-disciplined time source (PTP/GPS-synchronized), and the
-   heartbeat protocol bounds clock drift to a configurable tolerance (§17.2 of
-   the whitepaper).
+   of the intent. Both timestamps are Unix milliseconds; no conversion is
+   required. `valid_time` is supplied by the agent and `txn_time` comes from the
+   operator's system clock; the heartbeat protocol bounds clock drift to a
+   configurable tolerance (§17.2 of the whitepaper).
 
-5. **Verify the latent fingerprint against the registry**: Using `agent_id`,
-   retrieve the registered `model_hash` from the Multi-Agent Registry (or a
-   public registry snapshot). Confirm it matches `latent_fingerprint` in the
-   audit record. This proves the model that acted was the version the firm
-   registered — not a modified or unregistered variant.
+5. **Check the declared model against the registry**: Using `agent_id`,
+   retrieve the registered `model_hash` from the Multi-Agent Registry. IRL
+   checked at authorize time that the declared `model_hash_hex` matched it.
+   `model_hash` and `latent_fingerprint` are different values, both declared by
+   the operator: this shows consistency with the registration, not which model
+   actually ran.
 
 6. **Confirm the `client_order_id` binding**: The `client_order_id`
    (`ord-smoke-001`) is the field used to look up the pre-authorized intent
@@ -428,8 +428,8 @@ The agent (or an intermediary) routes the order to the wrong instrument.
 ```
 
 **What this proves:** The agent's authorised reasoning (ETH-PERP) and the actual
-exchange execution (BTC-PERP) are permanently, cryptographically separated in the
-audit ledger. The divergence cannot be erased retroactively. A compliance officer
+reported execution (BTC-PERP) are both in the audit ledger, with the status
+DIVERGENT. The status is recorded, not sealed. A reviewer
 querying `GET /irl/orphans` will see this trace flagged immediately.
 
 ### What This Means for a Regulator
@@ -440,22 +440,20 @@ The DIVERGENT record is the most important output IRL produces. It proves that:
    Long 1.0, permitted by IrlConstraintPolicy. The firm did not attempt to
    circumvent controls.
 
-2. **The execution deviated from intent**: BTC-PERP was executed, not ETH-PERP.
-   This is a provable fact — not an allegation — because both the authorised
-   intent and the exchange report are in the same cryptographic chain.
+2. **The reported execution deviated from intent**: the agent reported BTC-PERP,
+   not ETH-PERP. The sealed intent and the reported order id are in the record;
+   IRL reconciles the agent's report and does not query the exchange.
 
 3. **The divergence was detected automatically**: The IRL engine flagged it in
    real time, not retroactively. The timestamp of detection is part of the record.
 
-4. **The record cannot be altered**: The `final_proof` binds the divergent
-   exchange transaction to the authorised reasoning hash. Any attempt to replace
-   the exchange transaction ID would invalidate the proof.
+4. **What is and is not protected**: the sealed intent is protected by the
+   anchored `reasoning_hash`. `final_proof` binds the exchange transaction id to
+   it but is recomputable and not anchored, so a replaced transaction id is
+   checked against the venue's own records, not by the hash chain.
 
-A regulator can use this record to distinguish between a firm that had a
-compliance failure it detected and reported (the divergence is in the ledger)
-versus one that actively concealed a failure (no IRL record exists at all).
-The existence of a DIVERGENT record is evidence of a functioning compliance
-system, not evidence of wrongdoing.
+A DIVERGENT record shows that the reconciliation ran and flagged the difference.
+It is not, by itself, evidence of wrongdoing.
 
 ---
 

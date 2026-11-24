@@ -5,8 +5,8 @@
 > (`00000000-0000-4000-a000-000000000001` for crypto) to run the full
 > authorize → bind-execution flow interactively.
 
-IRL is designed to be incrementally adoptable. You can go from zero to a compliant
-pre-execution gateway in under a day, without changing your existing trading bot.
+IRL is designed to be incrementally adoptable. You can go from zero to a running
+pre-execution mandate gateway in under a day, without changing your existing trading bot.
 
 ---
 

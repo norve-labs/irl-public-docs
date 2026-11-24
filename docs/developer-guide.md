@@ -579,19 +579,13 @@ excessive writes on high-frequency flows).
 
 ### Q: What is the latency overhead?
 
-IRL adds <200 µs (p99) to the authorize path, measured end-to-end on the server:
-
-| Component | Cost |
-|-----------|------|
-| MTA fetch (cached) | ~0 µs |
-| MAR lookup (in-memory cache) | ~0 µs |
-| Policy evaluation | O(1) |
-| SHA-256 seal | ~1–2 µs |
-| JSON canonicalization | ~50–100 µs |
-| Async DB write (non-blocking) | ~0 µs blocking |
-
-The DB write is async and does not block the response. Your order placement proceeds
-before the trace is committed. Total add: **<200 µs p99**.
+The authorize call writes the trace to the database and waits for that write before
+it responds, so its latency is dominated by the database. Measured end-to-end: p50 18 ms
+and p99 42 ms at 100 concurrent agents on 4 vCPU (v1.1 run, 2026-04-02), and p50 75 ms /
+p99 100 ms in a smoke run on the shared 2 vCPU production VPS (2026-04-08). See
+[Performance Benchmarks](operations/performance-benchmarks.md). Policy evaluation,
+canonicalization and the SHA-256 seal take microseconds by comparison; they have not
+been benchmarked separately.
 
 For strategies >1,000 trades/sec see whitepaper §21 (batch sealing roadmap).
 

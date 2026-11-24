@@ -1,9 +1,13 @@
-# IRL — Intent, Reasoning, and Liability
+# IRL — Immutable Reasoning Log
 ## Whitepaper v5.1
 
 *IRL · October 2026 · [github.com/norve-labs/irl](https://github.com/norve-labs/irl) · [norve.dev](https://norve.dev)*
 
 > **What changed in v5.1 (November 2026).** Corrections, not new features.
+> The product name is **Immutable Reasoning Log**, as on norve.dev; earlier
+> drafts expanded IRL as "Intent, Reasoning, and Liability". The name is a
+> name: what the records are is *tamper-evident* (edits are detectable, not
+> impossible), and that is the term used in the text.
 > IRL is described as a mandate gateway, not a compliance gateway, and the
 > regulatory table in §12.3 is replaced by an informative note: IRL does not
 > certify or ensure compliance with any regulation. The canonical JSON used for
@@ -29,11 +33,11 @@
 
 Autonomous trading agents make thousands of decisions per day without a human in the loop. Current infrastructure records what they did — not what they knew, what they were permitted to do, or whether the exchange executed what was actually authorised. This gap between agent reasoning and market action is the **Ownership Gap**: the absence of a cryptographic chain of custody from decision to execution.
 
-IRL (Intent, Reasoning, and Liability) is a **signal-agnostic** pre-execution mandate gateway that addresses this gap. Before any order leaves the firm, IRL seals the agent's epistemic state — its knowledge of market regime, its model identity, its authorised intent — into a tamper-evident `CognitiveSnapshot`. That snapshot is cryptographically bound to the exchange confirmation, creating a tamper-evident audit chain: once a record is anchored, editing the sealed snapshot fails verification.
+IRL (Immutable Reasoning Log) is a **signal-agnostic** pre-execution mandate gateway that addresses this gap. Before any order leaves the firm, IRL seals the agent's epistemic state — its knowledge of market regime, its model identity, its authorised intent — into a tamper-evident `CognitiveSnapshot`. That snapshot is cryptographically bound to the exchange confirmation, creating a tamper-evident audit chain: once a record is anchored, editing the sealed snapshot fails verification.
 
 IRL needs no external signal to run: each agent's own mandate (notional cap, allowed assets and venues, model identity, status) is the policy. Optionally, IRL binds every decision to a cryptographically attested market regime through an abstract Market Truth Anchor (MTA) interface. MacroPulse operates one such signed regime feed; firms with proprietary regime models or multi-operator consensus pipelines connect their own. The seal mechanism and the audit chain are identical in every mode.
 
-AI agents increasingly trade through tool interfaces rather than custom code. The IRL Gateway exposes IRL as a Model Context Protocol (MCP) server, so any MCP-capable agent trades under a mandate it cannot break, with its rationale sealed into every trace.
+AI agents increasingly trade through tool interfaces rather than custom code. The IRL Gateway exposes IRL as a Model Context Protocol (MCP) server, so any MCP-capable agent trades under a mandate checked before every order, with its rationale sealed into every trace.
 
 This document specifies the IRL protocol, its three trust layers, and the trust architecture that makes the system credible at regulatory scale.
 
@@ -137,9 +141,9 @@ Everything in L1, plus:
 Everything in L2, plus:
 - **TEE execution** (Intel TDX / AMD SEV) — policy enforced in a hardware-attested enclave
 - **Wasm policy modules** — hot-reloadable sandboxed policies without engine changes
-- **ZK compliance proofs** — prove policy adherence without revealing model or strategy
+- **ZK policy proofs** (design, not implemented) — would prove policy adherence without revealing model or strategy
 
-The ZK layer is not complexity for its own sake. For a fund with proprietary alpha encoded in its model features, a standard audit trail reveals the strategy. Zero-knowledge proofs allow a fund to prove compliance to a regulator without disclosing the strategy. That is the only way to make compliance compatible with alpha preservation.
+The ZK layer is not complexity for its own sake. For a fund with proprietary alpha encoded in its model features, a standard audit trail reveals the strategy. Zero-knowledge proofs would let a fund show that its decisions satisfied the declared policy without disclosing the strategy. This is a design goal and is not implemented.
 
 ### 2.3 What IRL Is Not
 
@@ -201,7 +205,7 @@ Exchange ──(execution report)──► Agent
 ### 3.2 Three-Layer Trust Model
 
 **Layer 1 — Pre-Execution Gateway**
-The core protocol. Policy enforcement, cryptographic sealing, bitemporal audit, Multi-Agent Registry, post-trade verifier. This is the minimum viable compliance layer — deployable in under a day.
+The core protocol. Policy enforcement, cryptographic sealing, bitemporal audit, Multi-Agent Registry, post-trade verifier. This is the core layer — deployable in under a day.
 
 **Layer 2 — Verified Market Truth**
 Adds the signed heartbeat protocol. Each authorize request must carry a SignedHeartbeat: an Ed25519-signed attestation from the agent that it has observed a recent, valid MTA broadcast. Prevents replay attacks and binds the agent's heartbeat to the specific MTA state it claims to have observed.
@@ -737,11 +741,11 @@ No access to the agent's internal state, model weights, or strategy is required 
 |--------|-----------|
 | Agent forges a retroactive snapshot | Bitemporal constraint: `valid_time < txn_time` enforced at application + DB layer; IRL engine's `txn_time` is authoritative |
 | Agent replays a historical authorize request | Layer 2 heartbeat: monotonic sequence_id + mta_ref binding to current MTA state |
-| Agent claims a different model version post-hoc | L_t fingerprint: model_hash_hex verified against MAR at authorize time and embedded in sealed snapshot |
+| Agent claims a different model version post-hoc | model_hash_hex is checked against the MAR at authorize time (the check is not sealed); the separate L_t fingerprint is in the sealed snapshot. Both are declared by the operator |
 | MTA operator signs a false regime | Multi-MTA consensus (§17): k-of-n threshold signing removes single-operator trust |
 | Exchange reports a different asset than executed | Reconciliation: DIVERGENT result with divergence_reason permanently recorded |
-| Compliance officer rewrites the audit log | reasoning_hash and final_proof are derived from the data — altering any field invalidates the chain |
-| Hindsight bias: agent backdates its reasoning | Bitemporal invariant: the engine's wall-clock `txn_time` cannot be retroactively altered |
+| Someone with database access rewrites the audit log | Changing an anchored reasoning_hash breaks Merkle inclusion. Changing sealed snapshot fields is detectable only where the preimage can be recomputed (§7.3). final_proof, the MATCHED/DIVERGENT status and the policy verdict are not anchored and are not protected by the hash chain |
+| Hindsight bias: agent backdates its reasoning | Bitemporal invariant `valid_time < txn_time`, with `txn_time` set by the engine's clock. The clock is the operator's; anchoring bounds when a record existed |
 
 ### 13.2 What IRL Cannot Prevent
 
@@ -814,13 +818,11 @@ IRL's cryptographic guarantees are only as strong as the integrity of its inputs
 | Attestation services | ✗ | Partial | ✗ | ✗ |
 | **IRL** | **✓** | **✓** | **✓** | **✓** |
 
-There is no direct competitor. IRL fills a gap that currently has no solution — not because the problem is new, but because the cryptographic primitives required to solve it at production scale have only recently become viable at acceptable latency.
+The table reflects our reading of these categories, not a survey of every product. We are not aware of a product that combines all four properties; we would like to hear about one.
 
 ### 14.2 Who Is Forced to Adopt First
 
-IRL responds to specific, live regulatory and operational pressure:
-
-**Prop firms under SEC AI audit scrutiny** — The SEC's Division of Examinations has flagged AI-driven trading as a 2024–2026 examination priority. Firms must demonstrate that autonomous agents operated within defined parameters.
+These are the users we expect to care first. This is our assessment, not a statement of what any regulation requires:
 
 **Hedge funds with LP reporting requirements** — Institutional LPs are increasingly asking: "How do you know your AI didn't go rogue?" IRL provides a concrete, auditable answer.
 
@@ -828,15 +830,15 @@ IRL responds to specific, live regulatory and operational pressure:
 
 **Compliance teams scaling autonomous agent fleets** — One agent is manageable. Ten agents across multiple strategies, venues, and regimes is not. The MAR gives compliance teams visibility and control that logs cannot provide.
 
-**Firms preparing for MiCA, DORA, and AI governance mandates** — The EU AI Act and financial sector AI regulations are moving toward mandatory explainability and auditability for high-frequency decision systems.
+**Firms that want a record of their agents' decisions** — An independent, tamper-evident record of what each agent intended before it traded. IRL does not certify or ensure compliance with any regulation.
 
 ### 14.3 The Competitive Moat
 
 The moat is not the software — it is the combination of:
 1. **The seal** — IRL is the entity that issues the cryptographic chain of custody. Any regime signal, any exchange, any agent. The seal is what regulators, LPs, and counterparties trust — not the signal itself.
-2. **Signal agnosticism** — firms with proprietary models don't have to expose their alpha to get compliance. They bring their own MTA. IRL seals it. This is the adoption path that no bundled solution can offer.
+2. **Signal agnosticism** — firms with proprietary models don't have to expose their alpha to get a verifiable record. They bring their own MTA. IRL seals it. This is the adoption path that no bundled solution can offer.
 3. **MacroPulse as turnkey MTA** — for firms without a proprietary signal, MacroPulse is the reference operator: signed, versioned, fresh, zero additional infrastructure.
-4. **Incremental adoptability** — L1 in a day; L3 when mandated.
+4. **Incremental adoptability** — L1 in a day; L2 when needed; L3 is a design.
 
 Any firm can build logging. No firm can retroactively build a cryptographic chain of custody. IRL captures it at the only moment it can be captured honestly: before the order is placed.
 
@@ -1168,13 +1170,13 @@ Contact: hello@macropulse.live
 
 ---
 
-## 19. Zero-Knowledge Compliance Proofs (Layer 3)
+## 19. Zero-Knowledge Policy Proofs (Layer 3, design — not implemented)
 
 ### 19.1 The Alpha Protection Problem
 
 Standard audit disclosure creates a tension between two legitimate requirements: regulators need to verify that agent decisions complied with declared policy constraints, and firms need to protect the proprietary signals, model weights, and strategy logic that constitute their competitive advantage.
 
-IRL addresses this at Layer 3 through a zero-knowledge proof layer that allows a firm to prove compliance to a regulator without revealing the private inputs that drove the decision. The regulator receives mathematical certainty of compliance; the firm retains full confidentiality of its alpha.
+The Layer 3 design addresses this with a zero-knowledge proof that the sealed decision satisfied the declared policy constraints, without revealing the private inputs that drove it. A valid proof would show policy adherence for the inputs the circuit covers; it would not establish compliance with any regulation. This section describes a design; it is not implemented.
 
 ### 19.2 The Arithmetic Circuit
 
@@ -1193,7 +1195,7 @@ C(x, w) = 1  ⟺
     AND Align(E_t, R_t) = True            // Execution complied with regime policy
 ```
 
-The regulator verifies `π_t` using a public verifier key. A valid proof guarantees compliance **without revealing W or the alpha signals**.
+The regulator verifies `π_t` using a public verifier key. A valid proof would show that the execution satisfied the regime policy **without revealing W or the alpha signals**.
 
 ### 19.3 Two-Layer Disclosure Model
 
