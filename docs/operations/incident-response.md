@@ -287,11 +287,14 @@ to the DB and modifies historical traces, the cryptographic chain is broken.
 4. Revoke all DB write credentials immediately.
 
 ### Eradicate
-1. Compare every `reasoning_hash` in `irl.reasoning_traces` against a recomputed
-   hash of its `trace_json`:
+1. Version 1 `reasoning_hash` values cannot be recomputed from `trace_json`
+   (different structure; heartbeat fields are not persisted). Instead, check
+   every stored `reasoning_hash` against the anchored Merkle roots and the
+   OpenTimestamps receipts, and recompute `final_proof`. For `snapshot_version` 2
+   rows, recompute from the stored public view:
    ```sql
    -- Rows where stored hash diverges from expected are suspect.
-   -- Recomputation must be done in application code (RFC 8785 canonical JSON + SHA-256).
+   -- Recomputation is done in application code (whitepaper §7.1); use the open-source verifier.
    ```
 2. Identify the attack vector: direct DB access, compromised migration tooling,
    or compromised operator credentials.

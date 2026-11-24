@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-green)](LICENSE)
 [![Sandbox](https://img.shields.io/badge/sandbox-live-brightgreen)](https://norve.dev)
 
-**IRL (Immutable Reasoning Log)** is a cryptographic pre-execution compliance gateway for autonomous AI trading agents. Every trade decision is sealed with SHA-256 before it reaches the exchange, producing a tamper-evident audit trail that maps directly to MiFID II, EU AI Act, and SEC Rule 15c3-5 requirements.
+**IRL (Immutable Reasoning Log)** is a pre-execution mandate gateway for autonomous AI trading agents. Every trade decision is checked against the agent's mandate and sealed with SHA-256 before it reaches the exchange, producing a tamper-evident audit trail. IRL does not certify or ensure compliance with any regulation; see [Regulatory context](docs/compliance/regulatory-context.md).
 
 - **Website:** [macropulse.live/irl](https://macropulse.live/irl)
 - **Live API sandbox:** [norve.dev](https://norve.dev)
@@ -26,7 +26,7 @@ The full authorize → bind flow:
 1. Agent calls `POST /irl/authorize` with a reasoning snapshot (model ID, hash, action, asset, notional, venue)
 2. IRL verifies the agent exists in the Model Agent Registry (MAR)
 3. IRL runs pre-execution policy checks — position limits, regime constraints, notional caps
-4. The snapshot is sealed with SHA-256 into an immutable `reasoning_hash`
+4. The snapshot is sealed with SHA-256 into a `reasoning_hash`
 5. IRL optionally verifies a Layer 2 Ed25519-signed MTA heartbeat (anti-replay, regime binding)
 6. IRL returns `{ trace_id, reasoning_hash, authorized }` — the agent embeds these in the exchange order metadata
 7. After exchange confirmation, the agent calls `POST /irl/bind-execution` with the exchange `tx_id`; IRL computes `final_proof = SHA-256(reasoning_hash ‖ exchange_tx_id)` — the chain is closed
@@ -43,8 +43,7 @@ The full authorize → bind flow:
 | [Case Studies](docs/case-studies.md) | Equity fund, prop desk, quant fund deployment examples |
 | [Exchange Integration](docs/exchange-integration.md) | FIX protocol tags, REST order metadata, venue-specific notes |
 | [Free & open](docs/pricing.md) | What's free, licensing (FSL engine, MIT gateway/SDKs), commercial use |
-| [Compliance Guide](docs/compliance/compliance-guide.md) | Regulatory mapping: MiFID II, EU AI Act, SEC 15c3-5, DORA |
-| [Regulatory Mapping](docs/compliance/regulatory-mapping.md) | Table: requirement → IRL mechanism |
+| [Regulatory context](docs/compliance/regulatory-context.md) | What IRL records and proves, what it does not, and why it is not a compliance product |
 | [Operations Guide](docs/operations/incident-response.md) | Incident response runbook |
 | [Service levels](docs/operations/service-level-agreement.md) | What you can rely on (self-hosted, sandbox); no paid SLA yet |
 | [Performance Benchmarks](docs/operations/performance-benchmarks.md) | Throughput, p50/p99 latency at scale |
@@ -171,8 +170,7 @@ irl-public-docs/
 │   ├── exchange-integration.md
 │   ├── pricing.md
 │   ├── compliance/
-│   │   ├── compliance-guide.md
-│   │   └── regulatory-mapping.md
+│   │   └── regulatory-context.md
 │   └── operations/
 │       ├── incident-response.md
 │       ├── service-level-agreement.md
