@@ -23,7 +23,7 @@ Anyone with a bundle can check, with the open-source verifier and without trusti
 
 - That each `final_proof` equals SHA-256 of its `reasoning_hash` and exchange order id (consistency, not tamper evidence: `final_proof` is not anchored).
 - That each record's `reasoning_hash` is in the Merkle root of the anchor covering its `txn_time`.
-- The Bitcoin anchor, with the standard OpenTimestamps client and public block data.
+- The Bitcoin anchor, with the standard OpenTimestamps client and public block data, using the `.ots` file downloaded from the norve.dev verifier (`ots verify -d <merkle_root> anchor.ots`). The files written today by `irl-verify --dump-ots` lack the OpenTimestamps file header and are not accepted by the standard client.
 
 For `snapshot_version` 1 traces, recomputing the `reasoning_hash` itself requires the full sealed snapshot, which a public bundle does not include.
 

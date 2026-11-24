@@ -170,7 +170,7 @@ IRL is built on four non-negotiable properties. These are not implementation pre
 
 ### 3.1 Overview
 
-IRL is a sidecar service. It runs alongside the agent, intercepts intent before the exchange, and produces an immutable audit record for every decision.
+IRL is a sidecar service. It runs alongside the agent, intercepts intent before the exchange, and produces a tamper-evident audit record for every decision it authorizes.
 
 ```
 MacroPulse MTA ──(Ed25519 signed regime)──► IRL Engine
@@ -195,7 +195,7 @@ Exchange ──(execution report)──► Agent
                                    │  final_proof computed
                                    │  MATCHED / DIVERGENT / EXPIRED
                                    ▼
-                               Immutable Audit Ledger
+                           Tamper-evident Audit Ledger
 ```
 
 ### 3.2 Three-Layer Trust Model
@@ -240,7 +240,7 @@ pub struct MtaState {
 
 `regime_id` and `regime_label` are fully opaque to IRL — the engine does not pattern-match on them. The three normalized constraint fields (`risk_level`, `max_notional_scale`, `allowed_sides`) are what the policy engine reads. An operator running a 4-state HMM, a 2-state bull/bear model, a VIX-based classifier, or a continuous credit-spread score all satisfy this contract by mapping their output to these three fields.
 
-The `hash` field is SHA-256 of the canonical JSON (keys sorted, no whitespace) of the regime payload, computed before the signature is applied. This hash is embedded in every `CognitiveSnapshot`, cryptographically binding each agent decision to the specific MTA broadcast the agent was operating under.
+The `hash` field is SHA-256 of the raw bytes of the MTA HTTP response body, signature included. The canonical JSON (keys sorted, no whitespace) is used only to verify the operator's signature. This hash is embedded in every `CognitiveSnapshot`, cryptographically binding each agent decision to the specific MTA broadcast the agent was operating under.
 
 ### 4.3 Signature Verification
 
@@ -422,17 +422,20 @@ When `max_notional_scale = 0.0` (e.g., a fully defensive regime state), no new n
 The `CognitiveSnapshot` is serialised to IRL canonical JSON before hashing:
 - Object keys are sorted recursively by code point
 - No whitespace outside of string values
-- Strings and numbers are written as the engine serialises them; numbers are **not** normalised (`2.50` stays `2.50`)
+- Strings escaped as JSON (`\" \\ \b \f \n \r \t`, other U+0000–U+001F as lowercase `\u00xx`, everything else literal UTF-8)
+- Numbers: integer fields as decimal integers; floating-point fields as serde_json 1.x prints f64 (shortest round-trip, integral values keep `.0`, exponent form such as `1e16` or `1e-7` at large or small magnitudes), so `2.50` is sealed as `2.5`
 
-This is **not** RFC 8785 (JCS). JCS also normalises numbers with the ECMAScript algorithm, so a generic JCS library can produce different bytes for the same record. To verify a record, keep the numbers exactly as they appear in the stored or exported JSON and use the open-source verifier, or reproduce the rules above.
+This is **not** RFC 8785 (JCS): number formatting differs (JCS uses the ECMAScript algorithm), so a generic JCS library can produce different bytes for the same record. When verifying, copy number literals verbatim from the bundle; do not re-parse and re-print them. The stored `trace_json` is a different structure from the sealed snapshot and cannot be used as the preimage.
 
 Plain `serde_json::to_string()` does **not** guarantee field ordering across crate versions or struct changes and is not used for audit hashing.
 
-For records whose numbers are written as integers or as the shortest form, the canonical form can be reproduced with:
+The recommended way to check a hash is the open-source verifier. For `snapshot_version` 2 bundles, the `public_view` preimage can also be reproduced in Python, as long as no float is below `1e-4` in magnitude or written in exponent form (Python prints `5e-05` where the engine prints `0.00005`):
 ```python
-import json
-canonical = json.dumps(snapshot_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+import hashlib, json
+canonical = json.dumps(public_view, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+reasoning_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 ```
+Version 1 preimages are not included in bundles and cannot be reproduced this way (§12.2).
 
 ### 7.2 Reasoning Hash
 
@@ -454,7 +457,7 @@ Every trace is stored with two time dimensions:
 - **valid_time** — when the agent claims to have reasoned (business time)
 - **txn_time** — when the IRL engine recorded the intent (transaction time)
 
-Both timestamps are inside the sealed snapshot, so changing either one changes the reasoning_hash; detecting it requires recomputing the hash from the full snapshot (v1) or the public view (v2). Queries over the bitemporal ledger can reconstruct the exact state of the world as it was known at any historical point — not just what happened, but what was believed to be true when it happened.
+Both timestamps are inside the sealed snapshot, so changing either one changes the reasoning_hash. Today a verifier cannot detect such a change: version 1 preimages are not available, and the verifiers do not yet cross-check the bundle's `txn_time`, `valid_time` and `trace_id` against the version 2 `public_view`; Merkle inclusion uses the unsealed `txn_time`. Queries over the bitemporal ledger can reconstruct the exact state of the world as it was known at any historical point — not just what happened, but what was believed to be true when it happened.
 
 ### 7.4 Why JSON
 
@@ -466,7 +469,7 @@ The primary requirement for snapshot serialisation is determinism: two independe
 | Debug transparency | Records are human-readable during incident investigation |
 | Interoperability | JSON is widely used for reporting and data exchange — no translation layer |
 
-The known limitation is numbers: IRL keeps each number as the engine serialised it instead of normalising it, so verifiers must work on the exported text, not on re-parsed and re-printed values. A move to full RFC 8785 (JCS) would require a new `snapshot_version` (§7.5) and is not implemented.
+The known limitation is numbers: IRL formats them as serde_json does, not as JCS does, so verifiers must copy number literals from the bundle rather than re-print parsed values. A move to full RFC 8785 (JCS) would require a new `snapshot_version` (§7.5) and is not implemented.
 
 Serialisation occurs once per snapshot for hashing and storage, not in a tight execution loop.
 
@@ -479,7 +482,7 @@ snapshot_version 1 = SHA-256 over the whole snapshot in IRL canonical JSON (§7.
 snapshot_version 2 = split seal: public fields plus a commitment to private fields  (behind a flag, off by default)
 ```
 
-Version 2 lets an auditor recompute the hash from the public bundle without seeing private order detail. It stays off until the version-2-aware verifier ships. Existing version 1 traces remain verifiable under version 1 rules.
+Version 2 lets an auditor recompute the hash from the public bundle without seeing private order detail. Both verifiers support it, but it stays off by default until known gaps are closed: `snapshot_version` is not bound into the hash (relabelling a version 2 trace as version 1 skips the preimage check), bundle timestamps are not cross-checked against `public_view`, and the export rounds `quantity` and `notional` to 8 decimals. Existing version 1 traces keep their version 1 rules.
 
 ### 7.6 Merkle Aggregation
 
@@ -705,14 +708,14 @@ Every authorised intent, whether matched, divergent, or expired, produces a `Rea
 
 - **Tamper-evident** — the reasoning_hash is written once on authorize; altering it or any sealed field breaks verification
 - **Queryable** — the bitemporal timestamps support as-of queries over the ledger
-- **Reproducible** — given the same snapshot fields, any compliant implementation can recompute reasoning_hash and final_proof and verify they match the stored values
+- **Checkable** — anyone with the bundle can recompute `final_proof` and check Merkle inclusion and the OpenTimestamps anchor. The version 1 `reasoning_hash` cannot be recomputed from stored records: the full snapshot (including heartbeat fields) is not persisted, `trace_json` is a different structure, and GDPR erasure nulls some fields
 - **Self-contained** — the record embeds the MTA hash, policy hash, L_t fingerprint, and full execution intent — no external references are required to verify the chain
 
 ### 12.2 Forensic Replay
 
 `GET /irl/trace/:trace_id` returns the complete record. An auditor can:
 
-1. Recompute `reasoning_hash` from the stored snapshot fields using IRL canonical JSON (§7.1) + SHA-256
+1. For `snapshot_version` 2, recompute `reasoning_hash` from the `public_view` (§7.1). For version 1 this is not possible from stored records (§12.1); check `final_proof`, Merkle inclusion and the anchor instead
 2. Verify the MTA signature using the MacroPulse public key
 3. Confirm the bitemporal constraint
 4. Recompute `final_proof` from `reasoning_hash + exchange_tx_id`
@@ -1370,7 +1373,7 @@ final_proof = SHA-256("b3971de1..." || "||" || "exch-tx-9001")
 }
 ```
 
-**For a regulator:** This record can be independently verified by (1) recomputing `reasoning_hash` from the stored fields using IRL canonical JSON + SHA-256, (2) verifying the MTA signature using the operator's registered public key, (3) confirming `valid_time < txn_time`, (4) recomputing `final_proof`. No access to the agent's model or strategy is required.
+**For a regulator:** This record can be independently verified by (1) checking that its `reasoning_hash` is included in an anchored Merkle root (the version 1 hash itself cannot be recomputed from stored records), (2) verifying the MTA signature using the operator's registered public key, (3) confirming `valid_time < txn_time`, (4) recomputing `final_proof`. No access to the agent's model or strategy is required.
 
 ---
 
@@ -1390,7 +1393,7 @@ divergence_reason: "Asset mismatch: authorized ETH-PERP, executed BTC-PERP"
 final_proof: 47831b5a27bce55baee0577cc5bdf8a7239637743150713b692260472a3c888f
 ```
 
-**For a regulator:** The DIVERGENT record proves two things simultaneously — the firm's intent was legitimate (ETH-PERP, within policy), and the execution deviated from that intent. The divergence is provable and permanent. A DIVERGENT record is evidence of a *functioning* compliance system, not of wrongdoing.
+**For a regulator:** The DIVERGENT record proves two things simultaneously — the firm's intent was legitimate (ETH-PERP, within policy), and the execution deviated from that intent. The engine records the divergence; the `DIVERGENT` status is recorded, not sealed. A DIVERGENT record shows that the check ran, not that anyone did something wrong.
 
 ---
 
@@ -1471,7 +1474,7 @@ sequenceDiagram
     end
 
     IRL-->>AG: {verification_status: MATCHED, final_proof}
-    Note over IRL: Trace sealed — immutable audit record
+    Note over IRL: Trace sealed — tamper-evident audit record
 ```
 
 ---
@@ -1520,7 +1523,7 @@ graph TB
 
     subgraph L2["Layer 2 — Verified Market Truth"]
         hb["Signed Heartbeat\n(anti-replay)"] --- ptv["Post-Trade Verifier\nPENDING→MATCHED/DIVERGENT/EXPIRED"]
-        ptv --- ledger["Immutable Bitemporal Ledger"]
+        ptv --- ledger["Tamper-evident Bitemporal Ledger"]
     end
 
     subgraph L3["Layer 3 — Sovereign Execution (future)"]
